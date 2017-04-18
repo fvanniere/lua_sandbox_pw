@@ -1,0 +1,53 @@
+clone:
+      tags: true
+
+build:
+  bundle:
+    image: dock.pw.fr/pw/debpkg:$$DEBIAN_VERSION
+    commands:
+      - echo "deb [arch=amd64] http://pkg.planet-work.com/debian jessie main non-free" > /etc/apt/sources.list.d/planet-work.list
+      - echo "deb http://ftp.fr.debian.org/debian/ jessie-backports main" > /etc/apt/sources.list.d/backports.list
+      - apt-get update >/dev/null
+      - apt-get install -y -t jessie-backports cmake libgeoip-dev lua-redis geoip-database
+      - apt-get install -y --allow-unauthenticated luasandbox luasandbox-lpeg luasandbox-socket luasandbox-ssl luasandbox-syslog luasandbox-geoip lua-redis luasandbox-circular-buffer
+      - mkdir release
+      - cd release
+      - cmake -DCMAKE_BUILD_TYPE=release -DENABLE_ALL_EXT=true -DCPACK_GENERATOR=DEB ..
+      - make
+      - ctest -V
+      - make packages
+  test:
+    image: dock.pw.fr/pw/debpkg:jessie
+    commands:
+      - echo "deb [arch=amd64] http://pkg.planet-work.com/debian jessie main non-free" > /etc/apt/sources.list.d/planet-work.list
+      - echo "deb http://ftp.fr.debian.org/debian/ jessie-backports main" > /etc/apt/sources.list.d/backports.list
+      - apt-get update >/dev/null
+      - echo "****** Tests fonctionnels *****"
+      - ls -l .. . release/
+      - uname -a 
+      - apt-get update >/dev/null
+      - apt-get install -y -t jessie-backports cmake libgeoip-dev lua-redis geoip-database
+      - apt-get install -y --allow-unauthenticated luasandbox luasandbox-lpeg luasandbox-socket luasandbox-ssl  luasandbox-syslog luasandbox-geoip lua-redis luasandbox-circular-buffer
+      - find . -name "*.deb"
+      - dpkg -i release/*deb
+
+publish:
+  sftp:
+    host: pippin.planet-work.net
+    username: pkg
+    files:
+      - ../*.deb
+    destination_path: incoming/hindsight/$$DEBIAN_VERSION
+    when:
+      event: tag
+  ssh:
+    host: pippin.planet-work.net
+    user: pkg
+    commands:
+      - aptly repo add debian-$$DEBIAN_VERSION incoming/hindsight/$$DEBIAN_VERSION && aptly publish update $$DEBIAN_VERSION debian 
+    when:
+      event: tag
+
+matrix:
+  DEBIAN_VERSION:
+    - jessie
